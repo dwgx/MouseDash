@@ -1,5 +1,5 @@
 {
-    "theme": "auto",
+    "theme": "dark",
     "speed": 200.0,
     "start_shortcut": "F1",
     "stop_shortcut": "F2",
@@ -7,5 +7,6 @@
     "stop_play_shortcut": "F5",
     "target_process": "\u5168\u5c40",
     "playback_mode": false,
-    "prevent_background_detection": true
+    "prevent_background_detection": true,
+    "windows_notification_enabled": true
 }

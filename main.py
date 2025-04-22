@@ -6,7 +6,9 @@ import psutil
 import win32gui
 import win32process
 import random
+import threading
 from typing import Dict, List, Any
+from winotify import Notification, audio
 
 from PyQt5 import QtCore
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QEvent, QObject
@@ -26,15 +28,15 @@ from qfluentwidgets import (
     HyperlinkButton, CardWidget
 )
 
-# Directory paths
+# 目录路径
 MACRO_DIR = "./macros/"
 CONFIG_DIR = "./config/"
 
-# Ensure directories exist
+# 确保目录存在
 os.makedirs(MACRO_DIR, exist_ok=True)
 os.makedirs(CONFIG_DIR, exist_ok=True)
 
-# Configure logging
+# 配置日志
 logging.basicConfig(
     filename=os.path.join(MACRO_DIR, 'macro_controller.log'),
     level=logging.INFO,
@@ -143,7 +145,7 @@ class DisclaimerWidget(QWidget):
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(15, 15, 15, 15)
         self.title_label = SubtitleLabel("关于 & 免责声明")
-        self.author_label = BodyLabel("超级宏 - 宏录制与播放工具")
+        self.author_label = BodyLabel("老鼠大师 - 宏录制与播放工具")
         self.disclaimer_label = BodyLabel("本软件仅限个人使用。请勿用于非法用途。")
         self.disclaimer_label.setWordWrap(True)
         self.github_link = HyperlinkButton(url="https://github.com/dwgx", text="GitHub 仓库")
@@ -174,7 +176,7 @@ class TutorialWidget(QWidget):
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(15, 15, 15, 15)
         self.title_label = SubtitleLabel("使用教程")
-        self.description_label = BodyLabel("了解如何使用超级宏录制和播放宏")
+        self.description_label = BodyLabel("了解如何使用老鼠大师录制和播放宏")
         card_layout.addWidget(self.title_label)
         card_layout.addWidget(self.description_label)
         self.tutorial_browser = QTextBrowser()
@@ -188,8 +190,8 @@ class TutorialWidget(QWidget):
             }
         """)
         self.tutorial_browser.setHtml("""
-            <h2>超级宏使用教程</h2>
-            <p><b>超级宏</b> 是一个用于录制和播放鼠标和键盘操作的工具，适用于自动化任务。以下是使用步骤：</p>
+            <h2>老鼠大师使用教程</h2>
+            <p><b>老鼠大师</b> 是一个用于录制和播放鼠标和键盘操作的工具，适用于自动化任务。以下是使用步骤：</p>
             <h3>1. 录制宏</h3>
             <ul>
                 <li>在主页选择录制模式（仅鼠标、仅键盘或两者）。</li>
@@ -223,6 +225,7 @@ class TutorialWidget(QWidget):
                 <li>选择监控进程（默认全局，或指定某程序）。</li>
                 <li>切换播放模式（开关模式或释放模式）。</li>
                 <li>启用反检测以模拟人类操作，避免被检测。</li>
+                <li>启用/禁用 Windows 通知提醒。</li>
                 <li>选择界面主题（系统模式、亮色模式、暗色模式）。</li>
             </ul>
             <h3>注意事项</h3>
@@ -297,6 +300,7 @@ class MacroEditor(QWidget):
                 self.table.setItem(row, 4, QTableWidgetItem(details))
         except Exception as e:
             self.parent.show_warning("加载失败", f"加载失败: {str(e)}")
+            self.parent.show_windows_notification("加载失败", f"加载宏事件失败: {str(e)}", urgency="error")
             logging.error(f"加载宏事件失败: {str(e)}")
 
     def get_event_details(self, event: Dict[str, Any]) -> str:
@@ -334,7 +338,9 @@ class MacroEditor(QWidget):
         selected_rows = set(index.row() for index in self.table.selectedIndexes())
         if not selected_rows:
             self.parent.show_warning("无选中", "请先选择要删除的事件")
+            self.parent.show_windows_notification("无选中", "请先选择要删除的事件", urgency="warning")
             return
+
         for row in sorted(selected_rows, reverse=True):
             self.parent.events.pop(row)
         self.load_events()
@@ -369,9 +375,11 @@ class MacroEditor(QWidget):
                 elif event["type"] in ["key_press", "key_release"]:
                     event["key"] = self.table.item(row, 4).text().split(":")[1].strip()
             self.parent.show_success("成功", "宏事件更新成功")
+            self.parent.show_windows_notification("成功", "宏事件更新成功", urgency="success")
             logging.info("宏事件已修改")
         except Exception as e:
             self.parent.show_error("保存失败", f"保存失败: {str(e)}")
+            self.parent.show_windows_notification("保存失败", f"保存宏事件失败: {str(e)}", urgency="error")
             logging.error(f"保存宏事件失败: {str(e)}")
 
 
@@ -428,6 +436,7 @@ class MacroManager(QWidget):
                     logging.info(f"创建操作按钮: {file_name}")
         except Exception as e:
             self.parent.show_error("加载失败", f"加载失败: {str(e)}")
+            self.parent.show_windows_notification("加载失败", f"加载宏列表失败: {str(e)}", urgency="error")
             logging.error(f"加载宏列表失败: {str(e)}")
 
     def show_action_menu(self, file_name: str, button: QPushButton):
@@ -447,9 +456,11 @@ class MacroManager(QWidget):
             with open(file_path, 'r', encoding='utf-8') as f:
                 self.parent.events = json.load(f)
             self.parent.show_success("成功", f"已加载宏: {file_name}")
+            self.parent.show_windows_notification("成功", f"已加载宏: {file_name}", urgency="success")
             logging.info(f"加载宏: {file_name}")
         except Exception as e:
             self.parent.show_error("加载失败", f"加载失败: {str(e)}")
+            self.parent.show_windows_notification("加载失败", f"加载宏 {file_name} 失败: {str(e)}", urgency="error")
             logging.error(f"加载宏 {file_name} 失败: {str(e)}")
 
     def edit_macro(self, file_name: str):
@@ -460,25 +471,30 @@ class MacroManager(QWidget):
             self.parent.editor_widget.load_events()
             self.parent.stackedWidget.setCurrentWidget(self.parent.editor_widget)
             self.parent.show_success("成功", f"已加载宏: {file_name}")
+            self.parent.show_windows_notification("成功", f"已加载宏: {file_name}", urgency="success")
             logging.info(f"编辑宏: {file_name}")
         except Exception as e:
             self.parent.show_error("编辑失败", f"编辑失败 {file_name}: {str(e)}")
+            self.parent.show_windows_notification("编辑失败", f"编辑宏 {file_name} 失败: {str(e)}", urgency="error")
             logging.error(f"编辑宏 {file_name} 失败: {str(e)}")
 
     def delete_macro(self, file_name: str):
-        reply = QMessageBox.question(
-            self, f"确认删除: {file_name}",
+        result = self.parent.show_prompt_notification(
             f"确认删除: {file_name}",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            f"确认删除: {file_name}",
+            icon="question",
+            buttons=["Yes", "No"]
         )
-        if reply == QMessageBox.Yes:
+        if result == "Yes":
             try:
                 os.remove(os.path.join(MACRO_DIR, file_name))
                 self.load_macros()
                 self.parent.show_success("成功", f"已删除宏: {file_name}")
+                self.parent.show_windows_notification("成功", f"已删除宏: {file_name}", urgency="success")
                 logging.info(f"删除宏: {file_name}")
             except Exception as e:
                 self.parent.show_error("删除失败", f"删除失败 {file_name}: {str(e)}")
+                self.parent.show_windows_notification("删除失败", f"删除宏 {file_name} 失败: {str(e)}", urgency="error")
                 logging.error(f"删除宏 {file_name} 失败: {str(e)}")
 
 
@@ -500,7 +516,7 @@ class SettingsWidget(QWidget):
         card_layout.addWidget(self.title_label)
         card_layout.addWidget(self.description_label)
 
-        # Shortcuts
+        # 快捷键设置
         shortcut_layout = QVBoxLayout()
         start_layout = QHBoxLayout()
         self.start_key_label = BodyLabel("开始录制快捷键")
@@ -531,7 +547,7 @@ class SettingsWidget(QWidget):
         shortcut_layout.addLayout(stop_play_layout)
         card_layout.addLayout(shortcut_layout)
 
-        # Process Monitoring
+        # 进程监控
         process_layout = QHBoxLayout()
         self.process_label = BodyLabel("监控进程")
         self.process_combo = ComboBox()
@@ -542,24 +558,36 @@ class SettingsWidget(QWidget):
         process_layout.addWidget(self.process_combo)
         card_layout.addLayout(process_layout)
 
-        # Playback Mode
+        # 播放模式
         playback_mode_layout = QHBoxLayout()
         self.playback_mode_label = BodyLabel("播放模式")
         self.playback_mode_combo = ComboBox()
         self.playback_mode_combo.addItems(["开关模式", "释放模式"])
         self.playback_mode_combo.setCurrentIndex(0)
+        self.playback_mode_status = BodyLabel("当前模式: 开关")
         playback_mode_layout.addWidget(self.playback_mode_label)
         playback_mode_layout.addWidget(self.playback_mode_combo)
+        playback_mode_layout.addWidget(self.playback_mode_status)
         card_layout.addLayout(playback_mode_layout)
 
-        # Anti-Detection
+        # 反检测
         anti_detection_layout = QVBoxLayout()
         self.prevent_background_detection_checkbox = QCheckBox("启用反检测")
         self.prevent_background_detection_checkbox.setChecked(True)
         anti_detection_layout.addWidget(self.prevent_background_detection_checkbox)
         card_layout.addLayout(anti_detection_layout)
 
-        # Theme
+        # Windows 通知
+        notification_layout = QVBoxLayout()
+        self.windows_notification_checkbox = QCheckBox("启用 Windows 通知")
+        self.windows_notification_checkbox.setChecked(True)
+        self.test_notification_button = PushButton("测试通知", icon=FluentIcon.INFO)
+        self.test_notification_button.clicked.connect(self.test_notification)
+        notification_layout.addWidget(self.windows_notification_checkbox)
+        notification_layout.addWidget(self.test_notification_button)
+        card_layout.addLayout(notification_layout)
+
+        # 主题
         theme_layout = QHBoxLayout()
         self.theme_label = BodyLabel("主题")
         self.theme_combo = ComboBox()
@@ -575,6 +603,7 @@ class SettingsWidget(QWidget):
         card_layout.addWidget(self.apply_button)
         layout.addWidget(card)
         layout.addStretch()
+        self.playback_mode_combo.currentIndexChanged.connect(self.update_mode_status)
 
     def populate_processes(self):
         try:
@@ -591,6 +620,14 @@ class SettingsWidget(QWidget):
         except Exception as e:
             logging.error(f"无法列举进程: {str(e)}")
 
+    def update_mode_status(self, index: int):
+        mode = "释放" if index == 1 else "开关"
+        self.playback_mode_status.setText(f"当前模式: {mode}")
+
+    def test_notification(self):
+        self.parent.show_windows_notification("测试通知", "这是一个测试 Windows 通知", urgency="normal")
+        self.parent.show_info("测试通知", "已发送测试通知，请检查系统通知栏")
+
     def apply_settings(self):
         try:
             start_seq = self.start_key_edit.keySequence().toString()
@@ -605,12 +642,24 @@ class SettingsWidget(QWidget):
             process_name = self.process_combo.currentText()
             playback_mode = self.playback_mode_combo.currentText() == "释放模式"
             self.parent.prevent_background_detection = self.prevent_background_detection_checkbox.isChecked()
+            self.parent.windows_notification_enabled = self.windows_notification_checkbox.isChecked()
             self.parent.update_settings(start_seq, stop_seq, play_seq, stop_play_seq, process_name, playback_mode)
+            self.parent.setFocus()
+            self.parent.activateWindow()
+            if self.parent.listener_thread:
+                self.parent.listener_thread.stop()
+                self.parent.start_global_listener()
+            self.update_mode_status(self.playback_mode_combo.currentIndex())
             self.parent.show_success("成功", "设置更新成功")
+            self.parent.show_windows_notification("设置更新", "设置已成功应用", urgency="success")
             logging.info(
-                f"设置更新: 开始={start_seq}, 停止={stop_seq}, 播放={play_seq}, 停止播放={stop_play_seq}, 进程={process_name}, 反检测={self.parent.prevent_background_detection}, 播放模式={'释放' if playback_mode else '开关'}")
+                f"设置更新: 开始={start_seq}, 停止={stop_seq}, 播放={play_seq}, 停止播放={stop_play_seq}, "
+                f"进程={process_name}, 反检测={self.parent.prevent_background_detection}, "
+                f"播放模式={'释放' if playback_mode else '开关'}, 通知={self.parent.windows_notification_enabled}"
+            )
         except Exception as e:
             self.parent.show_error("错误", f"错误: {str(e)}")
+            self.parent.show_windows_notification("错误", f"应用设置失败: {str(e)}", urgency="error")
             logging.error(f"应用设置失败: {str(e)}")
 
     def apply_theme(self, index: int):
@@ -639,68 +688,54 @@ class ListenerThread(QThread):
         self.is_running = True
         try:
             while self.is_running:
-                # Keep the thread alive; hotkeys are handled by GlobalHotKeys
                 time.sleep(0.1)
         except Exception as e:
             self.parent.logger.error(f"监听器线程异常: {str(e)}")
             self.parent.show_error("监听器错误", f"监听器错误: {str(e)}")
+            self.parent.show_windows_notification("监听器错误", f"监听器错误: {str(e)}", urgency="error")
 
     def update_hotkeys(self, shortcuts: Dict[str, str]):
-        """Update the global hotkeys with the provided shortcuts."""
         try:
-            # Stop the existing listener if it exists
             self.stop_listener()
-
-            # Convert shortcuts to pynput format and create handlers
             hotkey_map = {}
             for seq, action in shortcuts.items():
-                # Convert PyQt5 QKeySequence format to pynput format
                 pynput_seq = self.convert_to_pynput_format(seq)
                 if pynput_seq:
                     hotkey_map[pynput_seq] = lambda act=action: self.parent.pynput_signals.shortcut_signal.emit(act)
-
             if not hotkey_map:
                 self.parent.logger.warning("未设置有效的快捷键")
                 return
-
-            # Start a new GlobalHotKeys listener
             self.hotkey_listener = keyboard.GlobalHotKeys(hotkey_map)
             self.hotkey_listener.start()
             self.parent.logger.info(f"已更新全局快捷键: {list(hotkey_map.keys())}")
         except Exception as e:
             self.parent.logger.error(f"更新快捷键失败: {str(e)}")
             self.parent.show_error("快捷键错误", f"更新快捷键失败: {str(e)}")
+            self.parent.show_windows_notification("快捷键错误", f"更新快捷键失败: {str(e)}", urgency="error")
 
     def convert_to_pynput_format(self, seq: str) -> str:
-        """Convert a PyQt5 QKeySequence string to pynput hotkey format."""
         try:
             seq = seq.lower()
             parts = seq.split('+')
             formatted_parts = []
-
             for part in parts:
                 part = part.strip()
-                # Handle modifiers
                 if part == 'ctrl':
                     formatted_parts.append('<ctrl>')
                 elif part == 'shift':
                     formatted_parts.append('<shift>')
                 elif part == 'alt':
                     formatted_parts.append('<alt>')
-                # Handle function keys
                 elif part.startswith('f') and part[1:].isdigit():
                     formatted_parts.append(f'<{part}>')
-                # Handle regular keys
                 else:
                     formatted_parts.append(part)
-
             return '+'.join(formatted_parts)
         except Exception as e:
             self.parent.logger.error(f"转换快捷键格式失败 ({seq}): {str(e)}")
             return ""
 
     def stop_listener(self):
-        """Stop the hotkey listener if it's running."""
         if self.hotkey_listener:
             try:
                 self.hotkey_listener.stop()
@@ -710,7 +745,6 @@ class ListenerThread(QThread):
                 self.parent.logger.error(f"停止全局快捷键监听器失败: {str(e)}")
 
     def stop(self):
-        """Stop the thread and the listener."""
         self.is_running = False
         self.stop_listener()
         self.quit()
@@ -720,7 +754,6 @@ class ListenerThread(QThread):
 class MacroController(FluentWindow):
     def __init__(self):
         super().__init__()
-        # Initialize attributes
         self.theme = 'auto'
         self.events: List[Dict[str, Any]] = []
         self.playback_thread = None
@@ -731,12 +764,14 @@ class MacroController(FluentWindow):
         self.stop_play_shortcut = "F5"
         self.target_process = "全局"
         self.prevent_background_detection = True
-        self.playback_mode = False  # False: Toggle mode, True: Hold mode
+        self.playback_mode = False
+        self.windows_notification_enabled = True
         self.recording = False
         self.start_time = None
         self.mouse_listener = None
         self.keyboard_listener = None
         self.last_move_time = 0.0
+        self.last_shortcut_time = 0.0
         self.is_play_key_pressed = False
         self.pynput_signals = PynputSignals()
         self.pynput_signals.move_signal.connect(self.handle_move)
@@ -779,6 +814,8 @@ class MacroController(FluentWindow):
         self.logger.info("应用启动")
         if not self.is_admin():
             self.show_warning("权限警告", "请以管理员权限运行以确保所有功能正常")
+            self.show_windows_notification("权限警告", "请以管理员权限运行以确保所有功能正常", urgency="warning")
+            self.show_prompt_notification("权限警告", "请以管理员权限运行以确保所有功能正常", icon="warning")
 
     def is_admin(self) -> bool:
         try:
@@ -803,13 +840,15 @@ class MacroController(FluentWindow):
                 'stop_play_shortcut': self.stop_play_shortcut,
                 'target_process': self.target_process,
                 'playback_mode': self.playback_mode,
-                'prevent_background_detection': self.prevent_background_detection
+                'prevent_background_detection': self.prevent_background_detection,
+                'windows_notification_enabled': self.windows_notification_enabled
             }
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=4)
         except Exception as e:
             self.logger.error(f"保存配置失败: {str(e)}")
             self.show_error("配置错误", f"配置错误: {str(e)}")
+            self.show_windows_notification("配置错误", f"配置错误: {str(e)}", urgency="error")
 
     def load_config(self):
         config_file = os.path.join(CONFIG_DIR, 'config.json')
@@ -818,7 +857,7 @@ class MacroController(FluentWindow):
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
                     self.theme = config.get('theme', 'auto')
-                    speed = config.get('speed', 100)
+                    speed = config.get('speed', 1.0)
                     self.start_shortcut = config.get('start_shortcut', 'F1')
                     self.stop_shortcut = config.get('stop_shortcut', 'F2')
                     self.play_shortcut = config.get('play_shortcut', 'F4')
@@ -826,6 +865,7 @@ class MacroController(FluentWindow):
                     self.target_process = config.get('target_process', '全局')
                     self.playback_mode = config.get('playback_mode', False)
                     self.prevent_background_detection = config.get('prevent_background_detection', True)
+                    self.windows_notification_enabled = config.get('windows_notification_enabled', True)
                     self.speed_spin.setValue(speed)
                     self.update_settings(
                         self.start_shortcut,
@@ -839,6 +879,7 @@ class MacroController(FluentWindow):
         except Exception as e:
             self.logger.error(f"加载配置失败: {str(e)}")
             self.show_error("配置错误", f"配置错误: {str(e)}")
+            self.show_windows_notification("配置错误", f"配置错误: {str(e)}", urgency="error")
 
     def set_theme(self, theme: str):
         self.theme = theme
@@ -882,7 +923,7 @@ class MacroController(FluentWindow):
         main_layout.setAlignment(Qt.AlignTop)
         main_layout.setSpacing(15)
 
-        # Status Card
+        # 状态卡片
         status_card = CardWidget()
         status_layout = QVBoxLayout(status_card)
         status_layout.setContentsMargins(15, 15, 15, 15)
@@ -898,7 +939,7 @@ class MacroController(FluentWindow):
         status_layout.addLayout(status_info_layout)
         main_layout.addWidget(status_card)
 
-        # Recording Control Card
+        # 录制控制卡片
         recording_card = CardWidget()
         recording_layout = QVBoxLayout(recording_card)
         recording_layout.setContentsMargins(15, 15, 15, 15)
@@ -926,7 +967,7 @@ class MacroController(FluentWindow):
         recording_layout.addLayout(control_layout)
         main_layout.addWidget(recording_card)
 
-        # Playback Control Card
+        # 播放控制卡片
         playback_card = CardWidget()
         playback_layout = QVBoxLayout(playback_card)
         playback_layout.setContentsMargins(15, 15, 15, 15)
@@ -949,9 +990,9 @@ class MacroController(FluentWindow):
         self.play_count_spin.setValue(1)
         self.speed_label = BodyLabel("播放速度 (x)")
         self.speed_spin = QDoubleSpinBox()
-        self.speed_spin.setRange(1, 99999999999)
-        self.speed_spin.setValue(100)
-        self.speed_spin.setSingleStep(50)
+        self.speed_spin.setRange(0.01, 1000)
+        self.speed_spin.setValue(1.0)
+        self.speed_spin.setSingleStep(0.1)
         self.speed_spin.setKeyboardTracking(True)
         self.speed_spin.valueChanged.connect(self.validate_speed)
         settings_layout.addWidget(self.play_count_label)
@@ -961,13 +1002,13 @@ class MacroController(FluentWindow):
         playback_layout.addLayout(settings_layout)
         main_layout.addWidget(playback_card)
 
-        # Manage Macros Button
+        # 管理宏按钮
         self.manager_button = PrimaryPushButton("管理宏", icon=FluentIcon.FOLDER)
         self.manager_button.clicked.connect(self.show_macro_manager)
         main_layout.addWidget(self.manager_button)
         main_layout.addStretch()
 
-        # Initialize Other Pages
+        # 初始化其他页面
         self.disclaimer_widget = DisclaimerWidget(self)
         self.disclaimer_widget.setObjectName("DisclaimerInterface")
         self.tutorial_widget = TutorialWidget(self)
@@ -979,13 +1020,13 @@ class MacroController(FluentWindow):
         self.manager_widget = MacroManager(self)
         self.manager_widget.setObjectName("ManagerInterface")
 
-        # Set Initial Button States
+        # 设置初始按钮状态
         self.stop_button.setEnabled(False)
         self.save_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
         self.stop_playback_button.setEnabled(False)
 
-        # Connect Signals
+        # 连接信号
         self.start_button.clicked.connect(self.start_recording)
         self.stop_button.clicked.connect(self.stop_recording)
         self.save_button.clicked.connect(self.save_recording)
@@ -994,7 +1035,7 @@ class MacroController(FluentWindow):
         self.stop_playback_button.clicked.connect(self.stop_playback)
         self.load_button.clicked.connect(self.load_macro)
 
-        # Navigation Bar
+        # 导航栏
         self.addSubInterface(self.main_widget, FluentIcon.HOME, "主页")
         self.addSubInterface(self.manager_widget, FluentIcon.FOLDER, "宏管理")
         self.addSubInterface(self.editor_widget, FluentIcon.EDIT, "编辑宏")
@@ -1007,6 +1048,7 @@ class MacroController(FluentWindow):
         if value <= 0:
             self.speed_spin.setValue(0.01)
             self.show_warning("无效速度", "播放速度必须为正数")
+            self.show_windows_notification("无效速度", "播放速度必须为正数", urgency="warning")
 
     def init_recorder(self):
         self.recording = False
@@ -1019,6 +1061,9 @@ class MacroController(FluentWindow):
         self.last_move_time = 0
 
     def start_global_listener(self):
+        if self.listener_thread:
+            self.listener_thread.stop()
+            self.listener_thread.wait()
         self.listener_thread = ListenerThread(self)
         shortcuts = {
             self.start_shortcut: "start_record",
@@ -1030,9 +1075,103 @@ class MacroController(FluentWindow):
         self.listener_thread.update_hotkeys(shortcuts)
         self.logger.info("全局键盘监听器启动")
 
+    def show_windows_notification(self, title: str, message: str, duration: int = 5, urgency: str = "normal"):
+        if not self.windows_notification_enabled:
+            self.logger.debug("Windows 通知已禁用")
+            return
+
+        def send_notification():
+            try:
+                self.logger.debug(f"尝试发送 Windows 通知: {title} - {message}")
+                toast = Notification(
+                    app_id="老鼠大师",
+                    title=title,
+                    msg=message,
+                    duration="short" if duration <= 5 else "long"
+                )
+
+                # 根据紧急程度自定义声音
+                sound = {
+                    "normal": audio.Default,
+                    "warning": audio.Mail,
+                    "error": audio.SMS,
+                    "success": audio.Reminder
+                }.get(urgency, audio.Default)
+                toast.set_audio(sound, loop=False)
+
+                # 添加操作按钮
+                toast.add_actions("查看帮助", "https://github.com/dwgx")
+
+                toast.show()
+                self.logger.info(f"Windows 通知发送成功: {title}")
+            except Exception as e:
+                self.logger.error(f"发送 Windows 通知失败: {str(e)}")
+                # 如果通知失败，使用应用内通知作为后备
+                if urgency == "success":
+                    InfoBar.success(title, message, position=InfoBarPosition.TOP_RIGHT, duration=5000, parent=self)
+                elif urgency == "warning":
+                    InfoBar.warning(title, message, position=InfoBarPosition.TOP_RIGHT, duration=5000, parent=self)
+                elif urgency == "error":
+                    InfoBar.error(title, message, position=InfoBarPosition.TOP_RIGHT, duration=5000, parent=self)
+                else:
+                    InfoBar.info(title, message, position=InfoBarPosition.TOP_RIGHT, duration=5000, parent=self)
+
+        threading.Thread(target=send_notification, daemon=True).start()
+
+    def show_prompt_notification(self, title: str, message: str, icon: str = "information",
+                                 buttons: list = ["Ok"]) -> str:
+        """
+        显示模态提示弹窗，使用 QMessageBox。
+
+        参数:
+            title (str): 对话框标题
+            message (str): 对话框消息
+            icon (str): 图标类型 ("information", "warning", "critical", "question")
+            buttons (list): 按钮标签列表 (如 ["Ok", "Cancel"])
+
+        返回:
+            str: 点击的按钮文本，若无匹配则返回 None
+        """
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+
+        # 设置图标
+        icon_map = {
+            "information": QMessageBox.Information,
+            "warning": QMessageBox.Warning,
+            "critical": QMessageBox.Critical,
+            "question": QMessageBox.Question
+        }
+        msg_box.setIcon(icon_map.get(icon, QMessageBox.Information))
+
+        # 添加按钮
+        button_map = {}
+        for btn_text in buttons:
+            if btn_text.lower() == "ok":
+                btn = msg_box.addButton(QMessageBox.Ok)
+            elif btn_text.lower() == "cancel":
+                btn = msg_box.addButton(QMessageBox.Cancel)
+            else:
+                btn = msg_box.addButton(btn_text, QMessageBox.ActionRole)
+            button_map[btn_text] = btn
+
+        msg_box.exec_()
+
+        # 返回点击的按钮文本
+        clicked_button = msg_box.clickedButton()
+        for text, btn in button_map.items():
+            if btn == clicked_button:
+                return text
+        return None
+
     def handle_shortcut(self, action: str):
         if not self.is_target_process_active():
             return
+        current_time = time.time()
+        if current_time - self.last_shortcut_time < 0.1:
+            return
+        self.last_shortcut_time = current_time
         if action == "start_record" and not self.recording:
             QApplication.postEvent(self, QEvent(QEvent.User))
             self.logger.info("触发开始录制快捷键")
@@ -1043,20 +1182,24 @@ class MacroController(FluentWindow):
             if self.playback_mode:
                 if not self.is_play_key_pressed:
                     self.is_play_key_pressed = True
-                    QApplication.postEvent(self, QEvent(QEvent.User + 2))
-                    self.logger.info("触发播放宏快捷键 (释放模式)")
+                    if not self.playback_thread or not self.playback_thread.isRunning():
+                        QApplication.postEvent(self, QEvent(QEvent.User + 2))
+                        self.logger.info("触发播放宏快捷键 (释放模式 - 开始)")
             else:
-                QApplication.postEvent(self, QEvent(QEvent.User + 2))
-                self.logger.info("触发播放宏快捷键 (开关模式)")
+                if not self.playback_thread or not self.playback_thread.isRunning():
+                    QApplication.postEvent(self, QEvent(QEvent.User + 2))
+                    self.logger.info("触发播放宏快捷键 (开关模式)")
         elif action == "stop_play":
-            if self.playback_mode and self.is_play_key_pressed:
-                self.is_play_key_pressed = False
+            if self.playback_mode:
+                if self.is_play_key_pressed:
+                    self.is_play_key_pressed = False
+                    if self.playback_thread and self.playback_thread.isRunning():
+                        QApplication.postEvent(self, QEvent(QEvent.User + 3))
+                        self.logger.info("触发停止播放快捷键 (释放模式)")
+            else:
                 if self.playback_thread and self.playback_thread.isRunning():
                     QApplication.postEvent(self, QEvent(QEvent.User + 3))
-                    self.logger.info("触发停止播放快捷键 (释放模式)")
-            elif not self.playback_mode and self.playback_thread:
-                QApplication.postEvent(self, QEvent(QEvent.User + 3))
-                self.logger.info("触发停止播放快捷键 (开关模式)")
+                    self.logger.info("触发停止播放快捷键 (开关模式)")
 
     def is_target_process_active(self) -> bool:
         if self.target_process == "全局":
@@ -1094,7 +1237,8 @@ class MacroController(FluentWindow):
             self.play_button.setText(f"播放宏 ({self.play_shortcut})")
             self.stop_playback_button.setText(f"停止播放 ({self.stop_play_shortcut})")
             self.logger.info(
-                f"更新设置: 开始={start_seq}, 停止={stop_seq}, 播放={play_seq}, 停止播放={stop_play_seq}, 进程={process_name}, 播放模式={'释放' if playback_mode else '开关'}")
+                f"更新设置: 开始={start_seq}, 停止={stop_seq}, 播放={play_seq}, 停止播放={stop_play_seq}, "
+                f"进程={process_name}, 播放模式={'释放' if playback_mode else '开关'}")
         except Exception as e:
             self.logger.error(f"更新设置失败: {str(e)}")
             raise ValueError(f"错误: {str(e)}")
@@ -1117,6 +1261,8 @@ class MacroController(FluentWindow):
             if elapsed > 300:
                 self.stop_recording()
                 self.show_info("超时", "达到最大录制时间 (5分钟)")
+                self.show_windows_notification("超时", "达到最大录制时间 (5分钟)", urgency="warning")
+                self.show_prompt_notification("超时", "达到最大录制时间 (5分钟)", icon="warning")
 
     def start_recording(self):
         if self.recording:
@@ -1128,15 +1274,16 @@ class MacroController(FluentWindow):
         self.timer.start(100)
         mode = self.mode_combo.currentIndex()
         try:
-            if mode in [0, 2]:  # Mouse or Both
+            if mode in [0, 2]:  # 鼠标或两者
                 self.mouse_listener = mouse.Listener(
                     on_move=lambda x, y: self.pynput_signals.move_signal.emit(x, y),
-                    on_click=lambda x, y, button, pressed: self.pynput_signals.click_signal.emit(x, y, str(button), pressed),
+                    on_click=lambda x, y, button, pressed: self.pynput_signals.click_signal.emit(x, y, str(button),
+                                                                                                 pressed),
                     on_scroll=lambda x, y, dx, dy: self.pynput_signals.scroll_signal.emit(x, y, dx, dy)
                 )
                 self.mouse_listener.start()
                 self.logger.info("鼠标监听器启动")
-            if mode in [1, 2]:  # Keyboard or Both
+            if mode in [1, 2]:  # 键盘或两者
                 self.keyboard_listener = KeyboardListener(
                     on_press=lambda key: self.pynput_signals.press_signal.emit(str(key)),
                     on_release=lambda key: self.pynput_signals.release_signal.emit(str(key))
@@ -1146,7 +1293,8 @@ class MacroController(FluentWindow):
         except Exception as e:
             self.recording = False
             self.show_error("监听器错误", f"监听器错误: {str(e)}")
-            self.logger.error(f"监听器启动失败: {str(e)}")
+            self.show_windows_notification("监听器错误", f"监听器错误: {str(e)}", urgency="error")
+            self.show_prompt_notification("监听器错误", f"监听器错误: {str(e)}", icon="critical")
             return
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -1157,6 +1305,7 @@ class MacroController(FluentWindow):
         self.manager_button.setEnabled(False)
         mode_text = ["仅鼠标", "仅键盘", "鼠标和键盘"][mode]
         self.show_success("开始录制", f"以 {mode_text} 模式开始录制")
+        self.show_windows_notification("开始录制", f"以 {mode_text} 模式开始录制", urgency="success")
         self.logger.info(f"开始录制，模式: {mode_text}")
 
     def stop_recording(self):
@@ -1186,6 +1335,9 @@ class MacroController(FluentWindow):
         self.load_button.setEnabled(True)
         self.manager_button.setEnabled(True)
         self.show_info("录制停止", "请保存或取消录制")
+        self.show_windows_notification("录制停止", "请保存或取消录制", urgency="normal")
+        if len(self.events) > 100:  # 如果事件过多则警告
+            self.show_prompt_notification("警告", "录制事件过多，可能影响性能", icon="warning")
         self.logger.info("录制停止")
 
     def handle_move(self, x: int, y: int):
@@ -1231,7 +1383,6 @@ class MacroController(FluentWindow):
                 key_str = 'shift'
             elif key_str in ['alt_l', 'alt_r']:
                 key_str = 'alt'
-            # Avoid recording the shortcut keys themselves
             shortcut_keys = {self.start_shortcut.lower(), self.stop_shortcut.lower(),
                              self.play_shortcut.lower(), self.stop_play_shortcut.lower()}
             if key_str not in shortcut_keys and key_str not in self.pressed_keys:
@@ -1264,6 +1415,8 @@ class MacroController(FluentWindow):
     def save_recording(self):
         if not self.events:
             self.show_warning("无内容", "未录制任何操作")
+            self.show_windows_notification("无内容", "未录制任何操作", urgency="warning")
+            self.show_prompt_notification("无内容", "未录制任何操作", icon="warning")
             return
         file_name, _ = QFileDialog.getSaveFileName(self, "保存录制", MACRO_DIR, "JSON Files (*.json)")
         if file_name:
@@ -1271,16 +1424,20 @@ class MacroController(FluentWindow):
                 with open(file_name, 'w', encoding='utf-8') as f:
                     json.dump(self.events, f, indent=4, ensure_ascii=False)
                 self.show_success("成功", f"宏已保存至 {file_name}")
+                self.show_windows_notification("成功", f"宏已保存至 {file_name}", urgency="success")
                 self.logger.info(f"宏保存至 {file_name}")
                 self.reset_ui()
             except Exception as e:
                 self.show_error("保存失败", f"保存失败: {str(e)}")
+                self.show_windows_notification("保存失败", f"保存失败: {str(e)}", urgency="error")
+                self.show_prompt_notification("保存失败", f"保存失败: {str(e)}", icon="critical")
                 self.logger.error(f"保存宏失败: {str(e)}")
 
     def cancel_recording(self):
         self.events = []
         self.reset_ui()
         self.show_info("已取消", "录制已丢弃")
+        self.show_windows_notification("已取消", "录制已丢弃", urgency="normal")
         self.logger.info("录制取消")
 
     def reset_ui(self):
@@ -1301,18 +1458,25 @@ class MacroController(FluentWindow):
                 with open(file_name, 'r', encoding='utf-8') as f:
                     self.events = json.load(f)
                 self.show_success("成功", f"已从 {file_name} 加载宏")
+                self.show_windows_notification("成功", f"已从 {file_name} 加载宏", urgency="success")
                 self.logger.info(f"从 {file_name} 加载宏")
                 self.editor_widget.load_events()
             except Exception as e:
                 self.show_error("加载失败", f"加载失败: {str(e)}")
+                self.show_windows_notification("加载失败", f"加载失败: {str(e)}", urgency="error")
+                self.show_prompt_notification("加载失败", f"加载失败: {str(e)}", icon="critical")
                 self.logger.error(f"加载宏失败: {str(e)}")
 
     def start_playback(self):
         if not self.events:
             self.show_warning("无宏", "未加载任何宏")
+            self.show_windows_notification("无宏", "未加载任何宏", urgency="warning")
+            self.show_prompt_notification("无宏", "未加载任何宏", icon="warning")
             return
         if self.playback_thread and self.playback_thread.isRunning():
             self.show_warning("正在播放", "播放正在进行")
+            self.show_windows_notification("正在播放", "播放正在进行", urgency="warning")
+            self.show_prompt_notification("正在播放", "播放正在进行", icon="warning")
             return
         self.playback_thread = PlaybackThread(self)
         self.playback_thread.finished.connect(self.on_playback_finished)
@@ -1323,8 +1487,11 @@ class MacroController(FluentWindow):
         self.stop_playback_button.setEnabled(not self.playback_mode)
         self.manager_button.setEnabled(False)
         self.show_info("开始播放", f"正在以 {self.speed_spin.value()}x 速度播放宏")
+        self.show_windows_notification("开始播放", f"正在以 {self.speed_spin.value()}x 速度播放宏", urgency="success")
         self.logger.info(
-            f"开始播放，重复: {self.play_count_spin.value()} 次，速度: {self.speed_spin.value()}x，模式: {'释放' if self.playback_mode else '开关'}")
+            f"开始播放，重复: {self.play_count_spin.value()} 次，速度: {self.speed_spin.value()}x，"
+            f"模式: {'释放' if self.playback_mode else '开关'}"
+        )
 
     def stop_playback(self):
         if self.playback_thread and self.playback_thread.isRunning():
@@ -1339,6 +1506,7 @@ class MacroController(FluentWindow):
         self.playback_thread = None
         self.is_play_key_pressed = False
         self.show_success("播放完成", "播放成功完成")
+        self.show_windows_notification("播放完成", "播放成功完成", urgency="success")
         self.logger.info("播放完成")
 
     def on_playback_interrupted(self):
@@ -1357,6 +1525,8 @@ class MacroController(FluentWindow):
         self.playback_thread = None
         self.is_play_key_pressed = False
         self.show_error("播放错误", f"播放错误: {error_msg}")
+        self.show_windows_notification("播放错误", f"播放错误: {error_msg}", urgency="error")
+        self.show_prompt_notification("播放错误", f"播放错误: {error_msg}", icon="critical")
         self.logger.error(f"播放错误: {error_msg}")
 
     def show_macro_manager(self):
@@ -1377,23 +1547,25 @@ class MacroController(FluentWindow):
 
     def closeEvent(self, event: QEvent):
         if self.recording:
-            reply = QMessageBox.question(
-                self, "确认退出",
+            result = self.show_prompt_notification(
+                "确认退出",
                 "正在录制，是否退出？",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+                icon="question",
+                buttons=["Yes", "No"]
             )
-            if reply == QMessageBox.Yes:
+            if result == "Yes":
                 self.stop_recording()
             else:
                 event.ignore()
                 return
         if self.playback_thread and self.playback_thread.isRunning():
-            reply = QMessageBox.question(
-                self, "确认退出",
+            result = self.show_prompt_notification(
+                "确认退出",
                 "正在播放，是否退出？",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+                icon="question",
+                buttons=["Yes", "No"]
             )
-            if reply == QMessageBox.Yes:
+            if result == "Yes":
                 self.stop_playback()
             else:
                 event.ignore()

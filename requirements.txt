@@ -1,0 +1,5 @@
+PyQt5>=5.15.9
+qfluentwidgets>=1.4.5
+pynput>=1.7.6
+psutil>=5.9.5
+winotify>=1.1.0
