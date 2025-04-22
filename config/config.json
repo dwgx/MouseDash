@@ -1,0 +1,11 @@
+{
+    "theme": "auto",
+    "speed": 200.0,
+    "start_shortcut": "F1",
+    "stop_shortcut": "F2",
+    "play_shortcut": "F4",
+    "stop_play_shortcut": "F5",
+    "target_process": "\u5168\u5c40",
+    "playback_mode": false,
+    "prevent_background_detection": true
+}
