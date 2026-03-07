@@ -28,9 +28,10 @@ from qfluentwidgets import (
     HyperlinkButton, CardWidget
 )
 
-# 目录路径
-MACRO_DIR = "./macros/"
-CONFIG_DIR = "./config/"
+# 目录路径（固定到脚本所在目录，避免从其它工作目录启动时读写错位）
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MACRO_DIR = os.path.join(BASE_DIR, "macros")
+CONFIG_DIR = os.path.join(BASE_DIR, "config")
 
 # 确保目录存在
 os.makedirs(MACRO_DIR, exist_ok=True)
