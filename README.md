@@ -23,29 +23,37 @@
 ### 环境要求
 
 - **操作系统**：Windows 10 或以上
-- **Python**：3.6 或以上
+- **Python**：建议 3.10 - 3.12（最低 3.9）
 
 ### 安装步骤
 
-1. **克隆或下载项目**：
+1. 克隆项目：
    ```bash
    git clone https://github.com/dwgx/MouseDash.git
    cd MouseDash
    ```
 
-2. **安装依赖**：
-   使用 pip 安装所需的 Python 库：
+2. 创建并激活虚拟环境（推荐）：
    ```bash
-   pip install PyQt5 pynput qfluentwidgets psutil pywin32 winotify
+   python -m venv .venv
+   .\.venv\Scripts\activate
    ```
 
-3. **运行程序**：
-   运行主程序文件：
+3. 安装依赖：
+   ```bash
+   python -m pip install --upgrade pip
+   python -m pip install -r requirements.txt
+   ```
+
+4. 运行程序：
    ```bash
    python main.py
    ```
 
-**注意**：建议以管理员权限运行程序，以确保所有功能（尤其是全局快捷键和进程监控）正常工作。
+### 依赖说明
+
+- 已在 `requirements.txt` 维护可安装依赖（含 `PyQt-Fluent-Widgets` 与 `pywin32`）。
+- 如提示缺少系统权限，请以管理员权限启动终端后再运行。
 
 ## 使用指南
 
