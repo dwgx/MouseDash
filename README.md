@@ -1,123 +1,111 @@
-# 老鼠大师 (MouseDash)
+# MouseDash / 老鼠大师
 
-![Logo](https://q2.qlogo.cn/headimg_dl?dst_uin=136666451&spec=100)
+> Windows 宏录制与播放工具 — 录制鼠标键盘操作，一键重放，专治重复劳动。
+> A Windows macro recorder & player — capture mouse and keyboard input, replay on demand.
 
-**老鼠大师** 是一款功能强大的宏录制与播放工具，旨在帮助用户自动化重复性的鼠标和键盘操作。适用于游戏玩家、程序员和办公自动化场景，支持自定义快捷键、多种播放模式、反检测功能及 Windows 通知提醒。
+面向游戏玩家、程序员、办公摸鱼人士。录制你的操作，保存成宏，想放几遍放几遍。带反检测、进程锁定、全局快捷键，该有的都有。
 
-## 功能特点
+Built for gamers, developers, and anyone stuck doing the same clicks a thousand times. Record your actions, save them, replay at will. Comes with anti-detection, process targeting, global hotkeys — the works.
 
-- **宏录制**：录制鼠标移动、点击、滚轮及键盘按键（单独或组合录制）。
-- **宏播放**：支持可调速度和重复次数，包含开关模式（按一次播放/停止）和释放模式（按住播放，松开停止）。
-- **宏管理**：以 JSON 格式保存、加载、编辑和删除宏。
-- **自定义设置**：
-  - 配置录制和播放快捷键（默认 F1 开始/停止录制，F4 播放/停止）。
-  - 选择监控进程（全局或指定程序）。
-  - 启用反检测，模拟人类操作以避免检测。
-  - 切换主题（系统、亮色、暗色）。
-- **Windows 通知**：支持系统通知，提示录制、播放状态及错误（可开关）。
-- **用户友好界面**：基于 PyQt5 和 qfluentwidgets，界面美观，操作直观。
-- **内置教程**：提供详细使用教程，助力快速上手。
+## Features / 功能
 
-## 安装
+- **宏录制 / Recording** — 录制鼠标移动、点击、滚轮、键盘按键。可选仅鼠标、仅键盘或全部录制。
+- **宏播放 / Playback** — 可调速度与重复次数。支持开关模式（按一次开始/停止）和释放模式（按住播放、松开停止）。
+- **宏管理 / Management** — JSON 格式保存，支持加载、编辑、删除。
+- **宏编辑 / Editing** — GUI 中逐事件查看修改，可增删单个动作。
+- **自定义快捷键 / Hotkeys** — 录制与播放均可配置快捷键（默认 F1/F2/F4/F5）。
+- **进程锁定 / Process targeting** — 全局监听，或仅在指定进程激活时响应（基于 psutil）。
+- **反后台检测 / Anti-detection** — 事件间插入自适应随机延迟，模拟人类操作节奏。
+- **Windows 通知 / Notifications** — 系统级通知提示录制/播放状态（基于 winotify）。
+- **主题切换 / Theming** — 系统 / 亮色 / 暗色，基于 qfluentwidgets。
 
-### 环境要求
+## Tech Stack / 技术栈
 
-- **操作系统**：Windows 10 或以上
-- **Python**：建议 3.10 - 3.12（最低 3.9）
+| Component | Library |
+|-----------|---------|
+| Language | Python 3.9+ |
+| GUI | PyQt5 >= 5.15.11, PyQt-Fluent-Widgets >= 1.11.2 |
+| Input | pynput >= 1.8.2 |
+| Process | psutil >= 7.2.2 |
+| Notifications | winotify >= 1.1.0 |
+| Windows API | pywin32 >= 312 |
 
-### 安装步骤
+完整依赖见 [`requirements.txt`](requirements.txt)。
 
-1. 克隆项目：
-   ```bash
-   git clone https://github.com/dwgx/MouseDash.git
-   cd MouseDash
-   ```
+## Project Structure / 项目结构
 
-2. 创建并激活虚拟环境（推荐）：
-   ```bash
-   python -m venv .venv
-   .\.venv\Scripts\activate
-   ```
+```
+MouseDash/
+├── main.py            # 单文件主程序：GUI、录制、播放、设置、监听线程
+├── requirements.txt   # Python 依赖
+├── config/
+│   └── config.json    # 默认配置（主题、快捷键、播放模式等）
+└── LICENSE            # MIT
+```
 
-3. 安装依赖：
-   ```bash
-   python -m pip install --upgrade pip
-   python -m pip install -r requirements.txt
-   ```
+宏保存在运行时创建的 `./macros/` 目录，配置在 `./config/`，首次启动自动生成。
 
-4. 运行程序：
-   ```bash
-   python main.py
-   ```
+## Getting Started / 快速开始
 
-### 依赖说明
+### Prerequisites / 环境要求
 
-- 已在 `requirements.txt` 维护可安装依赖（含 `PyQt-Fluent-Widgets` 与 `pywin32`）。
-- 如提示缺少系统权限，请以管理员权限启动终端后再运行。
+- Windows
+- Python 3.9+（推荐 3.10-3.12）
 
-## 使用指南
+### Install / 安装
 
-### 1. 录制宏
-1. 在主页选择录制模式（仅鼠标、仅键盘或两者）。
-2. 点击“开始/停止录制”按钮或按快捷键（默认 F1）开始录制。
-3. 执行您想要录制的操作。
-4. 再次点击按钮或按快捷键停止录制。
-5. 点击“保存录制”保存为 JSON 文件，或“取消录制”丢弃。
+```bash
+git clone https://github.com/dwgx/MouseDash.git
+cd MouseDash
 
-### 2. 播放宏
-1. 确保已录制或加载宏（通过“加载宏”按钮选择 JSON 文件）。
-2. 设置播放次数和速度。
-3. 点击“播放/停止”按钮或按快捷键（默认 F4）开始播放。
-   - **开关模式**：按一次播放，按一次停止。
-   - **释放模式**：按住播放，松开停止。
-4. 播放完成后会自动停止，或手动停止。
+python -m venv .venv
+.\.venv\Scripts\activate
 
-### 3. 管理宏
-- 点击“管理宏”进入宏管理页面。
-- 查看已保存的宏列表，支持使用、编辑或删除操作。
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-### 4. 编辑宏
-- 在宏管理页面选择“编辑”，或直接进入“编辑宏”页面。
-- 查看和修改宏事件（鼠标移动、点击、键盘按键等）。
-- 添加或删除事件，保存更改。
+### Run / 运行
 
-### 5. 设置
-- **快捷键**：修改录制和播放快捷键。
-- **监控进程**：选择监控全局或特定程序。
-- **播放模式**：选择开关模式或释放模式。
-- **反检测**：启用后添加随机延迟，模拟人类操作。
-- **Windows 通知**：启用/禁用通知提醒。
-- **主题**：切换界面主题。
+```bash
+python main.py
+```
 
-## 注意事项
+快捷键或全局监听不生效时，以管理员权限运行。
 
-- **权限**：以管理员权限运行以确保所有功能正常。
-- **录制时间**：最长 5 分钟，超时自动停止。
-- **存储**：宏文件保存在 `./macros/` 目录，配置文件保存在 `./config/` 目录。
-- **合法性**：请勿将本软件用于非法用途，开发者不对任何非法使用负责。
+## Usage / 使用方法
 
-## 开发与贡献
+1. **录制** — 选录制模式，按 F1 开始录制，操作完按 F2 停止，保存为 JSON。
+2. **播放** — 加载宏，设重复次数和速度，按 F4 播放，F5 停止。
+3. **管理** — 「管理宏」页面查看已有宏，可使用、编辑或删除。
+4. **编辑** — 「编辑宏」页面逐事件修改，支持增删事件。
+5. **设置** — 调整快捷键、监控进程、播放模式、反检测、通知、主题。
 
-本项目使用 Python 和 PyQt5 开发，欢迎贡献代码或提出建议！
+单次录制上限约 300 秒（5 分钟），超时自动停止。
 
-- **开发者**：dwgx
-- **GitHub**：https://github.com/dwgx/MouseDash
+## Configuration / 配置
 
-### 提交问题或建议
+默认配置 [`config/config.json`](config/config.json)，可通过设置界面修改：
 
-请在 GitHub 仓库提交 Issue，或者直接发送 Pull Request。
+| Key | Description | Default |
+|-----|-------------|---------|
+| `theme` | 主题 system/light/dark | `dark` |
+| `speed` | 播放速度 | `200.0` |
+| `start_shortcut` | 开始录制 | `F1` |
+| `stop_shortcut` | 停止录制 | `F2` |
+| `play_shortcut` | 开始播放 | `F4` |
+| `stop_play_shortcut` | 停止播放 | `F5` |
+| `target_process` | 监控进程 | `全局` |
+| `playback_mode` | false=开关, true=释放 | `false` |
+| `prevent_background_detection` | 反检测随机延迟 | `true` |
+| `windows_notification_enabled` | Windows 通知 | `true` |
 
-## 版本历史
+## Status / 状态
 
-- **v1.0.0**（2025-04-21）
-  - 初始版本，包含录制、播放、宏管理、编辑和设置功能。
-  - 添加 Windows 通知支持。
-  - 实现快捷键切换录制和播放。
+v1.0.0 已发布（2025-04-21）。单文件个人项目，功能完整。
 
-## 许可证
+Released v1.0.0. Single-file personal project, fully functional.
 
-本项目采用 MIT 许可证，详情请查看 [LICENSE](LICENSE) 文件。
+## License / 许可证
 
----
-
-感谢使用 **老鼠大师**！如果您有任何问题，请访问 [GitHub 仓库](https://github.com/dwgx/MouseDash) 获取帮助。
+[MIT](LICENSE) - Copyright (c) 2026 dwgx
